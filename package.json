@@ -1,0 +1,26 @@
+{
+	"name": "stc-inline",
+	"description": "Inlining files",
+	"version": "1.0.0",
+	"author": {
+		"name": "alvarto",
+		"email": "humphry.huang9@gmail.com"
+	},
+	"main": "lib/index.js",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/stcjs/stc-inline"
+	},
+	"engines": {
+		"node": ">=4.0.0"
+	},
+	"dependencies": {
+		"stc-helper": "^1.0.0",
+		"stc-plugin": "^1.0.1",
+		"flkit": "^3.0.1"
+	},
+	"readmeFilename": "README.md",
+	"bugs": {
+		"url": "https://github.com/stcjs/stc-inline/issues"
+	}
+}
