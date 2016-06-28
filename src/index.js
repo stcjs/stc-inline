@@ -3,17 +3,37 @@ import {extend} from 'stc-helper';
 import {createToken} from 'flkit';
 //import {isMaster} from 'cluster';
 
-function getPropAttr(token) {
-	if (token._t === "script") {
+function isTag(token, tagname) {
+	if (token.type)
+		switch (token.type) {
+			case "html_tag_start":
+				return token.detail.tagLowerCase === tagname;
+			case "html_tag_end":
+				return token.ext.tagLowerCase === tagname;
+			case "html_tag_textarea":
+				return tagname === "textarea";
+			case "html_tag_script":
+				return tagname === "script";
+			case "html_tag_style":
+				return tagname === "style";
+			case "html_tag_pre":
+				return tagname === "pre";
+			default:
+				return false;
+		}
+}
+
+function getProps(token) {
+	if (isTag(token, "script")) {
 		return token.ext.start.detail.attrs;
-	} else if (token._t === "link") {
+	} else if (isTag(token, "link")) {
 		return token.detail.attrs;
 	}
 }
 
 function getProp(token, attrname) {
 	let val = Number.POSITIVE_INFINITY;
-	getPropAttr(token).forEach(attr => {
+	getProps(token).forEach(attr => {
 		if (attr.nameLowerCase === attrname) {
 			val = attr.value;
 		}
@@ -21,17 +41,21 @@ function getProp(token, attrname) {
 	return val;
 }
 
+function propExists(token, attrname) {
+	return getProp(token, attrname) !== Number.POSITIVE_INFINITY;
+}
+
 function getUrl(token) {
-	if (token._t === "script") {
+	if (isTag(token, "script")) {
 		return getProp(token, "src");
-	} else if (token._t === "link") {
+	} else if (isTag(token, "link")) {
 		return getProp(token, "href");
 	}
 }
 
 function delProp(token, attrname) {
 	var srcID = -1,
-		props = getPropAttr(token);
+		props = getProps(token);
 
 	props.forEach((attr, index) => {
 		if (attr.nameLowerCase === attrname) {
@@ -46,26 +70,29 @@ function delProp(token, attrname) {
 	props.splice(srcID, 1);
 }
 
-function setContent(allToken, token, content) {
-	if (token._t === "script") {
+function setContent(token, content) {
+	if (isTag(token, "script")) {
 		delProp(token, "src");
 		delProp(token, "inline");
-		allToken[token._i].ext.content.value = content;
-	} else if (token._t === "link") {
-		let styleTag = createToken("html_tag_style", `<style>${content}</style>`);
+		token.ext.content.value = content;
+		
+		return token;
+	} else if (isTag(token, "link")) {
+		let styleToken = createToken("html_tag_style", `<style>${content}</style>`);
 
-		styleTag.ext.start = createToken("html_tag_start", "<style>", styleTag);
-		styleTag.ext.content = createToken("html_raw_text", content, styleTag);
-		styleTag.ext.end = createToken("html_tag_end", "</style>", styleTag);
+		styleToken.ext.start = createToken("html_tag_start", "<style>", styleToken);
+		styleToken.ext.start.detail = {};
+		styleToken.ext.start.detail.attrs = [];
+		styleToken.ext.start.detail.tag = "style";
+		styleToken.ext.start.detail.tagLowerCase = "style";
 
-		styleTag.ext.end.ext.tag = "style";
-		styleTag.ext.end.ext.tagLowerCase = "style";
+		styleToken.ext.content = createToken("html_raw_text", content, styleToken);
 
-		styleTag.ext.start.detail = {};
-		styleTag.ext.start.detail.attrs = [];
-		styleTag.ext.start.detail.tag = "style";
-		styleTag.ext.start.detail.tagLowerCase = "style";
-		allToken[token._i] = styleTag;
+		styleToken.ext.end = createToken("html_tag_end", "</style>", styleToken);
+		styleToken.ext.end.ext.tag = "style";
+		styleToken.ext.end.ext.tagLowerCase = "style";
+
+		return styleToken;
 	}
 }
 
@@ -74,26 +101,17 @@ export default class InlinePlugin extends Plugin {
 	 * run
 	 */
 	async run() {
-		let tokens = await this.getAst();
-
-		let inlinedToken = tokens
-			.filter((token, idx) => {
-				if (token.type === "html_tag_start" && token.detail.tag === "link") {
-					token._t = "link";
-					token._i = idx;
-					return true;
-				} else if (token.type === "html_tag_script") {
-					token._t = "script";
-					token._i = idx;
-					return true;
+		let allToken = await this.getAst(),
+			tokenIndex = new WeakMap(),
+			inlinedToken = allToken.filter((token, idx) => {
+				if (isTag(token, "script") || isTag(token, "link")) {
+					if (propExists(token, "inline")) {
+						tokenIndex.set(token, idx);
+						return true;
+					}
 				}
 				return false;
-			})
-			.filter(token => getProp(token, "inline") !== Number.POSITIVE_INFINITY);
-
-		if (!inlinedToken.length) {
-			return;
-		}
+			});
 
 		await Promise.all(inlinedToken.map(token => {
 			let path = getUrl(token);
@@ -103,14 +121,16 @@ export default class InlinePlugin extends Plugin {
 			}
 			return this.getFileByPath(path)
 				.then((file) => file.getContent("utf-8"))
-				.then((content) => setContent(tokens, token, content))
+				.then((content) => {
+					allToken[tokenIndex.get(token)] = setContent(token, content);
+				})
 				.catch((err) => {
 					console.error(err);
 					console.log(`Inline: cannot find file: ${path} @${this.file._path}`);
 				});
 		}));
 
-		return { tokens };
+		return { allToken };
 	}
 	/**
 	 * update
@@ -119,7 +139,7 @@ export default class InlinePlugin extends Plugin {
 		if (!data) {
 			return;
 		}
-		await this.setAst(data.tokens);
+		await this.setAst(data.allToken);
 	}
 	/**
 	 * use cluster
