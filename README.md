@@ -7,3 +7,19 @@ Use `inline` attribute in `<link rel="stylesheet">` or `<script>` to trigger thi
 ```html
 <script src="/resource/js/a.js" inline></script>
 ```
+
+## Usage
+
+```js
+// stc.config.js
+stc.workflow({
+  inline: {
+    plugin: inline,
+    include: /\.html$/,
+    options: {
+      uglify: true
+    }
+  },
+});
+```
+

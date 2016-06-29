@@ -1,6 +1,7 @@
 import Plugin from 'stc-plugin';
 import {extend} from 'stc-helper';
-//import {createToken} from 'flkit';
+import {UglifyJSPlugin} from 'stc-uglify';
+import {createToken} from 'flkit';
 //import {isMaster} from 'cluster';
 
 export default class InlinePlugin extends Plugin {
@@ -9,40 +10,91 @@ export default class InlinePlugin extends Plugin {
 	 */
 	async run() {
 		let allToken = await this.getAst(),
-			tokenIndex = new Map(),
-			inlinedToken = allToken.filter((token, idx) => {
-				if (isTag(token, "script") || isTag(token, "link")) {
-					if (propExists(token, "inline")) {
-						tokenIndex.set(token, idx);
-						return true;
-					}
-				}
-				return false;
-			});
+			inlinedTokenIds = [];
 
-		await Promise.all(inlinedToken.map(token => {
-			let path = getUrl(token);
-			if (!path) {
-				console.log(`Inline: parse error for: ${token.value} @${this.file._path}`)
-				return Promise.resolve();
+		allToken.forEach((token, idx) => {
+			if (isTag(token, "script") || isTag(token, "link")) {
+				if (propExists(token, "inline")) {
+					inlinedTokenIds.push(idx);
+				}
 			}
-			return this.getFileByPath(path)
-				.then((file) => file.getContent("utf-8"))
-				.catch((err) => {
-					console.error(err);
-					console.log(`Inline: cannot find file: ${path} @${this.file._path}`);
-				})
-				.then((content) => {
-					allToken[tokenIndex.get(token)] = setContent.bind(this)(token, content);
-				})
-				.catch((err) => {
-					console.error(err);
-					console.log(`Inline: content token parse error ${path} @${this.file._path}`);
-				});
-		}));
+		});
+
+		await Promise.all(
+			inlinedTokenIds.map(idx => this.replaceTokenPromise(allToken, idx))
+		);
 
 		return { allToken };
 	}
+
+	/**
+	 * replaceTokenPromise()
+	 * For each token,
+	 * return a promise which
+	 * inlines file, generate a token and replaces original token
+	 */
+	replaceTokenPromise(allToken, idx) {
+		let path,
+			token = allToken[idx],
+			file;
+
+		if (isTag(token, "script")) {
+			path = getProp(token, "src");
+		} else if (isTag(token, "link")) {
+			path = getProp(token, "href");
+		}
+		if (!path) {
+			return;
+		}
+
+		const fileErr = (err) => {
+			console.log(`Inline: cannot find file: ${path} @${this.file._path}`)
+		},
+			tokenErr = (err) => {
+				console.log(`Inline: token error ${path} @${this.file._path}`);
+				console.error(err);
+			};
+		let promise = this.getFileByPath(path)
+			.then(theFile => {
+				file = theFile;
+				return file;
+			});
+
+		if (isTag(token, "script")) {
+			if (this.options.uglify) {
+				// todo use uglify
+				// promise = promise
+				// 	.then(file => this.invokePlugin(UglifyJSPlugin, file));
+			}
+			promise = promise
+				.then(() => file.getContent("utf-8"))
+				// .catch(fileErr)
+				.then((content) => {
+					allToken[idx] = createHTMLTagToken("script", content);
+				})
+				.catch(tokenErr);
+		} else if (isTag(token, "link")) {
+			if (this.options.uglify) {
+				promise = promise
+					.then(() => file.getAst())
+					.catch(fileErr)
+					.then((contentTokens) => {
+						allToken[idx] = createHTMLTagToken("style", "", contentTokens);
+					})
+					.catch(tokenErr);
+			} else {
+				promise = promise
+					.then((file) => file.getContent("utf-8"))
+					.catch(fileErr)
+					.then((content) => {
+						allToken[idx] = createHTMLTagToken("style", content);
+					})
+					.catch(tokenErr);
+			}
+		}
+		return promise;
+	}
+
 	/**
 	 * update
 	 */
@@ -52,12 +104,14 @@ export default class InlinePlugin extends Plugin {
 		}
 		await this.setAst(data.allToken);
 	}
+
 	/**
 	 * use cluster
 	 */
 	static cluster() {
 		return false;
 	}
+
 	/**
 	 * use cache
 	 */
@@ -98,18 +152,17 @@ function getProps(token) {
 }
 
 function getProp(token, attrname) {
-	let val = Number.POSITIVE_INFINITY;
-	getProps(token).forEach(attr => {
+	for (let attr of getProps(token)) {
 		if (attr.nameLowerCase === attrname) {
-			val = attr.value;
+			return attr.value;
 		}
-	});
-	return val === Number.POSITIVE_INFINITY ? null : val;
+	}
+	return;
 }
 
 function propExists(token, attrname) {
-	for(let attr of getProps(token)) {
-		if(attr.nameLowerCase === attrname) {
+	for (let attr of getProps(token)) {
+		if (attr.nameLowerCase === attrname) {
 			return true;
 		}
 	}
@@ -133,36 +186,23 @@ function delProp(token, attrname) {
 	props.splice(srcID, 1);
 }
 
-function getUrl(token) {
-	if (isTag(token, "script")) {
-		return getProp(token, "src");
-	} else if (isTag(token, "link")) {
-		return getProp(token, "href");
-	}
-}
+function createHTMLTagToken(tagName, content, contentTokens) {
+	let token;
+	if (tagName === "style" || tagName === "script") {
+		token = createToken(`html_tag_${tagName}`, `<${tagName}>${content}</${tagName}>`);
 
-function setContent(token, content) {
-	if (isTag(token, "script")) {
-		delProp(token, "src");
-		delProp(token, "inline");
-		token.ext.content.value = content;
+		token.ext.start = createToken("html_tag_start", `<${tagName}>`, token);
+		token.ext.start.ext = {};
+		token.ext.start.ext.attrs = [];
+		token.ext.start.ext.tag = tagName;
+		token.ext.start.ext.tagLowerCase = tagName;
 
-		return token;
-	} else if (isTag(token, "link")) {
-		let styleToken = this.createToken("html_tag_style", `<style>${content}</style>`);
+		token.ext.content = createToken("html_raw_text", content, token);
+		token.ext.content.ext.tokens = contentTokens;
 
-		styleToken.ext.start = this.createToken("html_tag_start", "<style>", styleToken);
-		styleToken.ext.start.ext = {};
-		styleToken.ext.start.ext.attrs = [];
-		styleToken.ext.start.ext.tag = "style";
-		styleToken.ext.start.ext.tagLowerCase = "style";
-
-		styleToken.ext.content = this.createToken("html_raw_text", content, styleToken);
-
-		styleToken.ext.end = this.createToken("html_tag_end", "</style>", styleToken);
-		styleToken.ext.end.ext.tag = "style";
-		styleToken.ext.end.ext.tagLowerCase = "style";
-
-		return styleToken;
-	}
+		token.ext.end = createToken("html_tag_end", `</${tagName}>`, token);
+		token.ext.end.ext.tag = tagName;
+		token.ext.end.ext.tagLowerCase = tagName;
+	} // todo to be extended
+	return token;
 }
