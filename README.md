@@ -23,3 +23,9 @@ stc.workflow({
 });
 ```
 
+## Roadmap
+
+* [x] support uglify
+* [ ] use cluster if possilbe
+* [ ] use cache if possible
+* [ ] support `{inline: ""}.inline` in js files

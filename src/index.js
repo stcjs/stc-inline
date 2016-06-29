@@ -1,8 +1,8 @@
 import Plugin from 'stc-plugin';
 import {extend} from 'stc-helper';
 import UglifyJSPlugin from 'stc-uglify';
-import {createToken} from 'flkit';
-//import {isMaster} from 'cluster';
+import {createToken, TokenType} from 'flkit';
+// import {isMaster} from 'cluster';
 
 export default class InlinePlugin extends Plugin {
 	/**
@@ -62,13 +62,12 @@ export default class InlinePlugin extends Plugin {
 
 		if (isTag(token, "script")) {
 			if (this.options.uglify) {
-				// todo use uglify
 				promise = promise
 					.then(file => this.invokePlugin(UglifyJSPlugin, file));
 			}
 			promise = promise
 				.then(() => file.getContent("utf-8"))
-				// .catch(fileErr)
+				.catch(fileErr)
 				.then((content) => {
 					allToken[idx] = createHTMLTagToken("script", content);
 				})
@@ -123,15 +122,15 @@ export default class InlinePlugin extends Plugin {
 function isTag(token, tagname) {
 	if (token.type) {
 		switch (token.type) {
-			case "html_tag_start":
+			case TokenType.HTML_TAG_START:
 				return token.ext.tagLowerCase === tagname;
-			case "html_tag_textarea":
+			case TokenType.HTML_TAG_TEXTAREA:
 				return tagname === "textarea";
-			case "html_tag_script":
+			case TokenType.HTML_TAG_SCRIPT:
 				return tagname === "script";
-			case "html_tag_style":
+			case TokenType.HTML_TAG_STYLE:
 				return tagname === "style";
-			case "html_tag_pre":
+			case TokenType.HTML_TAG_PRE:
 				return tagname === "pre";
 			// case "html_tag_end":
 			// 	return token.ext.tagLowerCase === tagname;
