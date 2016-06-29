@@ -1,6 +1,6 @@
 import Plugin from 'stc-plugin';
 import {extend} from 'stc-helper';
-import {UglifyJSPlugin} from 'stc-uglify';
+import UglifyJSPlugin from 'stc-uglify';
 import {createToken} from 'flkit';
 //import {isMaster} from 'cluster';
 
@@ -63,8 +63,8 @@ export default class InlinePlugin extends Plugin {
 		if (isTag(token, "script")) {
 			if (this.options.uglify) {
 				// todo use uglify
-				// promise = promise
-				// 	.then(file => this.invokePlugin(UglifyJSPlugin, file));
+				promise = promise
+					.then(file => this.invokePlugin(UglifyJSPlugin, file));
 			}
 			promise = promise
 				.then(() => file.getContent("utf-8"))
