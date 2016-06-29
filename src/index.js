@@ -33,7 +33,7 @@ export default class InlinePlugin extends Plugin {
 					console.log(`Inline: cannot find file: ${path} @${this.file._path}`);
 				})
 				.then((content) => {
-					allToken[tokenIndex.get(token)] = setContent(token, content);
+					allToken[tokenIndex.get(token)] = setContent.bind(this)(token, content);
 				})
 				.catch((err) => {
 					console.error(err);
