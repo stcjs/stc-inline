@@ -1,6 +1,6 @@
 import Plugin from 'stc-plugin';
 import {extend} from 'stc-helper';
-import {createToken} from 'flkit';
+//import {createToken} from 'flkit';
 //import {isMaster} from 'cluster';
 
 export default class InlinePlugin extends Plugin {
@@ -70,7 +70,7 @@ function isTag(token, tagname) {
 	if (token.type) {
 		switch (token.type) {
 			case "html_tag_start":
-				return token.detail.tagLowerCase === tagname;
+				return token.ext.tagLowerCase === tagname;
 			case "html_tag_end":
 				return token.ext.tagLowerCase === tagname;
 			case "html_tag_textarea":
@@ -90,9 +90,9 @@ function isTag(token, tagname) {
 
 function getProps(token) {
 	if (isTag(token, "script")) {
-		return token.ext.start.detail.attrs;
+		return token.ext.start.ext.attrs;
 	} else if (isTag(token, "link")) {
-		return token.detail.attrs;
+		return token.ext.attrs;
 	}
 }
 
@@ -143,17 +143,17 @@ function setContent(token, content) {
 
 		return token;
 	} else if (isTag(token, "link")) {
-		let styleToken = createToken("html_tag_style", `<style>${content}</style>`);
+		let styleToken = this.createToken("html_tag_style", `<style>${content}</style>`);
 
-		styleToken.ext.start = createToken("html_tag_start", "<style>", styleToken);
-		styleToken.ext.start.detail = {};
-		styleToken.ext.start.detail.attrs = [];
-		styleToken.ext.start.detail.tag = "style";
-		styleToken.ext.start.detail.tagLowerCase = "style";
+		styleToken.ext.start = this.createToken("html_tag_start", "<style>", styleToken);
+		styleToken.ext.start.ext = {};
+		styleToken.ext.start.ext.attrs = [];
+		styleToken.ext.start.ext.tag = "style";
+		styleToken.ext.start.ext.tagLowerCase = "style";
 
-		styleToken.ext.content = createToken("html_raw_text", content, styleToken);
+		styleToken.ext.content = this.createToken("html_raw_text", content, styleToken);
 
-		styleToken.ext.end = createToken("html_tag_end", "</style>", styleToken);
+		styleToken.ext.end = this.createToken("html_tag_end", "</style>", styleToken);
 		styleToken.ext.end.ext.tag = "style";
 		styleToken.ext.end.ext.tagLowerCase = "style";
 
