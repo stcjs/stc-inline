@@ -21,7 +21,13 @@ export default class InlinePlugin extends Plugin {
 		});
 
 		await Promise.all(
-			inlinedTokenIds.map(idx => this.replaceTokenPromise(allToken, idx))
+			inlinedTokenIds.map(
+				idx => this.replaceTokenPromise(allToken, idx)
+					.catch((err) => {
+						this.error(`Token replace error`, allToken[idx].loc.start.line, allToken[idx].loc.start.column);
+						console.error(err);
+					})
+			)
 		);
 
 		return { allToken };
@@ -33,10 +39,9 @@ export default class InlinePlugin extends Plugin {
 	 * return a promise which
 	 * inlines file, generate a token and replaces original token
 	 */
-	replaceTokenPromise(allToken, idx) {
+	async replaceTokenPromise(allToken, idx) {
 		let path,
-			token = allToken[idx],
-			file;
+			token = allToken[idx];
 
 		if (isTag(token, "script")) {
 			path = getProp(token, "src");
@@ -47,72 +52,44 @@ export default class InlinePlugin extends Plugin {
 			return;
 		}
 
-		const fileErr = (err) => {
-			console.log(`Inline: cannot find file: ${path} @${this.file._path}`)
-		},
-			tokenErr = (err) => {
-				console.log(`Inline: token error ${path} @${this.file._path}`);
-				console.error(err);
-			};
-		let promise = this.getFileByPath(path)
-			.then(theFile => {
-				file = theFile;
-				return file;
-			});
+		let file = await this.getFileByPath(path);
 
 		if (isTag(token, "script")) {
 			if (this.options.uglify) {
-				promise = promise
-					.then(file => this.invokePlugin(UglifyJSPlugin, file));
+				await this.invokePlugin(UglifyJSPlugin, file);
 			}
-			promise = promise
-				.then(() => file.getContent("utf-8"))
-				.catch(fileErr)
-				.then((content) => {
-					allToken[idx] = createHTMLTagToken("script", content);
-				})
-				.catch(tokenErr);
+			let content = await file.getContent("utf-8");
+			allToken[idx] = createHTMLTagToken("script", content);
 		} else if (isTag(token, "link")) {
 			if (this.options.uglify) {
-				promise = promise
-					.then(() => file.getAst())
-					.catch(fileErr)
-					.then((contentTokens) => {
-						allToken[idx] = createHTMLTagToken("style", "", contentTokens);
-					})
-					.catch(tokenErr);
+				let contentTokens = await file.getAst()
+				allToken[idx] = createHTMLTagToken("style", "", contentTokens);
 			} else {
-				promise = promise
-					.then((file) => file.getContent("utf-8"))
-					.catch(fileErr)
-					.then((content) => {
-						allToken[idx] = createHTMLTagToken("style", content);
-					})
-					.catch(tokenErr);
+				let content = await file.getContent("utf-8")
+				allToken[idx] = createHTMLTagToken("style", content);
 			}
 		}
-		return promise;
 	}
 
 	/**
 	 * update
 	 */
-	async update(data) {
+	update(data) {
 		if (!data) {
 			return;
 		}
-		await this.setAst(data.allToken);
+		this.setAst(data.allToken);
 	}
 
 	/**
-	 * use cluster
+	 * We wont use cluster
 	 */
 	static cluster() {
 		return false;
 	}
 
 	/**
-	 * use cache
+	 * We wont use cache
 	 */
 	static cache() {
 		return false;
