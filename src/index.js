@@ -9,7 +9,7 @@ export default class InlinePlugin extends Plugin {
 	 */
 	async run() {
 		let allToken = await this.getAst(),
-			tokenIndex = new WeakMap(),
+			tokenIndex = new Map(),
 			inlinedToken = allToken.filter((token, idx) => {
 				if (isTag(token, "script") || isTag(token, "link")) {
 					if (propExists(token, "inline")) {
@@ -71,8 +71,6 @@ function isTag(token, tagname) {
 		switch (token.type) {
 			case "html_tag_start":
 				return token.ext.tagLowerCase === tagname;
-			case "html_tag_end":
-				return token.ext.tagLowerCase === tagname;
 			case "html_tag_textarea":
 				return tagname === "textarea";
 			case "html_tag_script":
@@ -81,6 +79,8 @@ function isTag(token, tagname) {
 				return tagname === "style";
 			case "html_tag_pre":
 				return tagname === "pre";
+			// case "html_tag_end":
+			// 	return token.ext.tagLowerCase === tagname;
 			default:
 		}
 	}
@@ -89,6 +89,7 @@ function isTag(token, tagname) {
 }
 
 function getProps(token) {
+	// todo to be extended 
 	if (isTag(token, "script")) {
 		return token.ext.start.ext.attrs;
 	} else if (isTag(token, "link")) {
@@ -103,11 +104,16 @@ function getProp(token, attrname) {
 			val = attr.value;
 		}
 	});
-	return val;
+	return val === Number.POSITIVE_INFINITY ? null : val;
 }
 
 function propExists(token, attrname) {
-	return getProp(token, attrname) !== Number.POSITIVE_INFINITY;
+	for(let attr of getProps(token)) {
+		if(attr.nameLowerCase === attrname) {
+			return true;
+		}
+	}
+	return false;
 }
 
 function delProp(token, attrname) {
