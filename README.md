@@ -34,3 +34,4 @@ stc.workflow({
 * [x] support uglify
 * [x] use cluster if possilbe
 * [ ] support `{inline: ""}.inline` in js files
+* [ ] support picture base64-ify in css files
