@@ -8,6 +8,12 @@ Use `inline` attribute in `<link rel="stylesheet">` or `<script>` to trigger thi
 <script src="/resource/js/a.js" inline></script>
 ```
 
+OR you can use `{inline: ""}.inline` to inline other js files.
+
+```js
+{inline: "/resource/js/a.js"}.inline;
+```
+
 ## Usage
 
 ```js
@@ -26,6 +32,5 @@ stc.workflow({
 ## Roadmap
 
 * [x] support uglify
-* [ ] use cluster if possilbe
-* [ ] use cache if possible
+* [x] use cluster if possilbe
 * [ ] support `{inline: ""}.inline` in js files

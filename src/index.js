@@ -1,8 +1,9 @@
 import Plugin from 'stc-plugin';
 import {extend} from 'stc-helper';
-import UglifyJSPlugin from 'stc-uglify';
 import {createToken, TokenType} from 'flkit';
-// import {isMaster} from 'cluster';
+import {isMaster} from 'cluster';
+import UglifyJSPlugin from 'stc-uglify';
+import CSSCompressPlugin from 'stc-css-compress';
 
 export default class InlinePlugin extends Plugin {
 	/**
@@ -52,20 +53,24 @@ export default class InlinePlugin extends Plugin {
 			return;
 		}
 
-		let file = await this.getFileByPath(path);
+		let file = await this.getFileByPath(path),
+			content;
 
 		if (isTag(token, "script")) {
 			if (this.options.uglify) {
-				await this.invokePlugin(UglifyJSPlugin, file);
+				let returnValue = await this.invokePlugin(UglifyJSPlugin, file);
+				content = returnValue.content;
+			} else {
+				content = await file.getContent("utf-8");
 			}
-			let content = await file.getContent("utf-8");
+
 			allToken[idx] = createHTMLTagToken("script", content);
 		} else if (isTag(token, "link")) {
 			if (this.options.uglify) {
-				let contentTokens = await file.getAst()
-				allToken[idx] = createHTMLTagToken("style", "", contentTokens);
+				let tokenlist = await this.invokePlugin(CSSCompressPlugin, file);
+				allToken[idx] = createHTMLTagToken("style", "", tokenlist);
 			} else {
-				let content = await file.getContent("utf-8")
+				content = await file.getContent("utf-8");
 				allToken[idx] = createHTMLTagToken("style", content);
 			}
 		}
@@ -85,7 +90,7 @@ export default class InlinePlugin extends Plugin {
 	 * We wont use cluster
 	 */
 	static cluster() {
-		return false;
+		return true;
 	}
 
 	/**
@@ -109,8 +114,6 @@ function isTag(token, tagname) {
 				return tagname === "style";
 			case TokenType.HTML_TAG_PRE:
 				return tagname === "pre";
-			// case "html_tag_end":
-			// 	return token.ext.tagLowerCase === tagname;
 			default:
 		}
 	}
@@ -167,16 +170,16 @@ function createHTMLTagToken(tagName, content, contentTokens) {
 	if (tagName === "style" || tagName === "script") {
 		token = createToken(`html_tag_${tagName}`, `<${tagName}>${content}</${tagName}>`);
 
-		token.ext.start = createToken("html_tag_start", `<${tagName}>`, token);
+		token.ext.start = createToken(TokenType.HTML_TAG_START, `<${tagName}>`, token);
 		token.ext.start.ext = {};
 		token.ext.start.ext.attrs = [];
 		token.ext.start.ext.tag = tagName;
 		token.ext.start.ext.tagLowerCase = tagName;
 
-		token.ext.content = createToken("html_raw_text", content, token);
+		token.ext.content = createToken(TokenType.HTML_RAW_TEXT, content, token);
 		token.ext.content.ext.tokens = contentTokens;
 
-		token.ext.end = createToken("html_tag_end", `</${tagName}>`, token);
+		token.ext.end = createToken(TokenType.HTML_TAG_END, `</${tagName}>`, token);
 		token.ext.end.ext.tag = tagName;
 		token.ext.end.ext.tagLowerCase = tagName;
 	} // todo to be extended
