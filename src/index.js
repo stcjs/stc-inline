@@ -1,46 +1,93 @@
 import Plugin from 'stc-plugin';
-import {extend} from 'stc-helper';
+import {extend, BackgroundURLMapper} from 'stc-helper';
 import {createToken, TokenType} from 'flkit';
 import {isMaster} from 'cluster';
 import UglifyJSPlugin from 'stc-uglify';
 import CSSCompressPlugin from 'stc-css-compress';
+
+const PIC_SIZE_MAX = 32768;
+const REG_CSS_URL = /\s*url\(/;
 
 export default class InlinePlugin extends Plugin {
 	/**
 	 * run
 	 */
 	async run() {
-		let allToken = await this.getAst(),
-			inlinedTokenIds = [];
+		let tokens = await this.getAst();
 
-		allToken.forEach((token, idx) => {
-			if (isTag(token, "script") || isTag(token, "link")) {
-				if (propExists(token, "inline")) {
-					inlinedTokenIds.push(idx);
+		switch (this.file.extname) {
+			case "html":
+				await Promise.all(
+					tokens.map((token, idx) => {
+						if (isTag(token, "script") || isTag(token, "link")) {
+							if (propExists(token, "inline")) {
+								return idx;
+							}
+						}
+					}).filter(idx => !!idx).map(idx => this.handleHTMLTokenPromise(tokens, idx))
+				);
+				break;
+			case "css":
+				if (this.options.datauri) {
+					await Promise.all(
+						tokens.map((token, idx) => {
+							if (token.type === TokenType.CSS_VALUE) {
+								if (REG_CSS_URL.test(token.value)) {
+									return idx;
+								}
+							}
+						}).filter(idx => !!idx).map(idx => this.handleCSSTokenPromise(tokens, idx))
+					);
 				}
-			}
-		});
+				break;
+			case "js":
+				// todo
+				break;
+			default: return;
+		}
 
-		await Promise.all(
-			inlinedTokenIds.map(
-				idx => this.replaceTokenPromise(allToken, idx)
-					.catch((err) => {
-						this.error(`Token replace error`, allToken[idx].loc.start.line, allToken[idx].loc.start.column);
-						console.error(err);
-					})
-			)
-		);
-
-		return { allToken };
+		return { tokens };
 	}
 
 	/**
-	 * replaceTokenPromise()
+	 * handleCSSTokenPromise()
+	 * For each CSS_VALUE token containing `url()`,
+	 * return a promise which
+	 * modify its value to base64 file content
+	 */
+	async handleCSSTokenPromise(allToken, idx) {
+		let token = allToken[idx],
+			mapper;
+		try {
+			mapper = new BackgroundURLMapper(token.value);
+		} catch (err) {
+			return;
+		}
+
+		if (mapper.isRemoteUrl()) {
+			return;
+		}
+
+		let file = await this.getFileByPath(mapper.url);
+		if (file.stat.size > PIC_SIZE_MAX) {
+			return;
+		}
+
+		let rawContent = await file.getContent(null);
+		let base64content = new Buffer(rawContent).toString('base64');
+
+		mapper.url = `data:image/${mapper.type};base64,${base64content}`;
+
+		token.value = token.ext.value = mapper + "";
+	}
+
+	/**
+	 * handleHTMLTokenPromise()
 	 * For each token,
 	 * return a promise which
-	 * inlines file, generate a token and replaces original token
+	 * inlines file content, generate a token and replaces original token
 	 */
-	async replaceTokenPromise(allToken, idx) {
+	async handleHTMLTokenPromise(allToken, idx) {
 		let path,
 			token = allToken[idx];
 
@@ -53,26 +100,35 @@ export default class InlinePlugin extends Plugin {
 			return;
 		}
 
-		let file = await this.getFileByPath(path),
-			content;
+		try {
+			let file = await this.getFileByPath(path),
+				content;
+		} catch (err) {
+			return;
+		}
 
-		if (isTag(token, "script")) {
-			if (this.options.uglify) {
-				let returnValue = await this.invokePlugin(UglifyJSPlugin, file);
-				content = returnValue.content;
-			} else {
-				content = await file.getContent("utf-8");
-			}
+		try {
+			if (isTag(token, "script")) {
+				if (this.options.uglify) {
+					let returnValue = await this.invokePlugin(UglifyJSPlugin, file);
+					content = returnValue.content;
+				} else {
+					content = await file.getContent("utf-8");
+				}
 
-			allToken[idx] = createHTMLTagToken("script", content);
-		} else if (isTag(token, "link")) {
-			if (this.options.uglify) {
-				let tokenlist = await this.invokePlugin(CSSCompressPlugin, file);
-				allToken[idx] = createHTMLTagToken("style", "", tokenlist);
-			} else {
-				content = await file.getContent("utf-8");
-				allToken[idx] = createHTMLTagToken("style", content);
+				allToken[idx] = createHTMLTagToken("script", content);
+			} else if (isTag(token, "link")) {
+				if (this.options.uglify) {
+					let tokenlist = await this.invokePlugin(CSSCompressPlugin, file);
+					allToken[idx] = createHTMLTagToken("style", "", tokenlist);
+				} else {
+					content = await file.getContent("utf-8");
+					allToken[idx] = createHTMLTagToken("style", content);
+				}
 			}
+		} catch (err) {
+			this.error(`Token replace error`, allToken[idx].loc.start.line, allToken[idx].loc.start.column);
+			console.error(err);
 		}
 	}
 
@@ -83,11 +139,12 @@ export default class InlinePlugin extends Plugin {
 		if (!data) {
 			return;
 		}
-		this.setAst(data.allToken);
+
+		this.setAst(data.tokens);
 	}
 
 	/**
-	 * We wont use cluster
+	 * use cluster
 	 */
 	static cluster() {
 		return true;

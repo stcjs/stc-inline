@@ -21,9 +21,10 @@ OR you can use `{inline: ""}.inline` to inline other js files.
 stc.workflow({
   inline: {
     plugin: inline,
-    include: /\.html$/,
+    include: /\.(html|js|css)$/,
     options: {
-      uglify: true
+      uglify: true,
+      datauri: true,
     }
   },
 });
@@ -34,4 +35,4 @@ stc.workflow({
 * [x] support uglify
 * [x] use cluster if possilbe
 * [ ] support `{inline: ""}.inline` in js files
-* [ ] support picture base64-ify in css files
+* [x] support picture base64-ify in css files
