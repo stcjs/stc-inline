@@ -16,18 +16,6 @@ export default class InlinePlugin extends Plugin {
 	 */
 	async run() {
 		switch (this.file.extname) {
-			case "html":
-				let tokens = await this.getAst();
-				await Promise.all(
-					tokens.map((token, idx) => {
-						if (isTag(token, "script") || isTag(token, "link")) {
-							if (propExists(token, "inline")) {
-								return idx;
-							}
-						}
-					}).filter(idx => typeof idx !== "undefined").map(idx => this.handleHTMLTokenPromise(tokens, idx))
-				);
-				return { tokens };
 			case "css":
 				if (this.options.datauri) {
 					let tokens = await this.getAst();
@@ -38,7 +26,8 @@ export default class InlinePlugin extends Plugin {
 									return idx;
 								}
 							}
-						}).filter(idx => !!idx).map(idx => this.handleCSSTokenPromise(tokens, idx))
+						}).filter(idx => typeof idx !== "undefined")
+						.map(idx => this.handleCSSTokenPromise(tokens, idx))
 					);
 					return { tokens };
 				}
@@ -52,7 +41,22 @@ export default class InlinePlugin extends Plugin {
 					};
 				}
 				break;
-			default: return;
+			default:
+				if (!this.isTpl()) {
+					return;
+				}
+				let tokens = await this.getAst();
+				await Promise.all(
+					tokens.map((token, idx) => {
+						if (isTag(token, "script") || isTag(token, "link")) {
+							if (propExists(token, "inline")) {
+								return idx;
+							}
+						}
+					}).filter(idx => typeof idx !== "undefined")
+					.map(idx => this.handleHTMLTokenPromise(tokens, idx))
+				);
+				return { tokens };
 		}
 	}
 
@@ -163,7 +167,6 @@ export default class InlinePlugin extends Plugin {
 
 	update(data) {
 		switch (this.file.extname) {
-			case "html":
 			case "css":
 				if (!data || !data.tokens) {
 					return;
@@ -171,9 +174,16 @@ export default class InlinePlugin extends Plugin {
 				this.setAst(data.tokens);
 				break;
 			case "js":
+				if (!data || !data.content) {
+					return;
+				}
 				this.setContent(data.content);
 				break;
-			default: return;
+			default:
+				if (!this.isTpl() || !data || !data.tokens) {
+					return;
+				}
+				this.setAst(data.tokens);
 		}
 	}
 
@@ -185,8 +195,11 @@ export default class InlinePlugin extends Plugin {
 		return false;
 	}
 
-	static includes() {
-		return /\.(html|css|js)$/;
+	static include() {
+		return [{
+			type: 'tpl'
+		}, /\.(css|js)$/
+		];
 	}
 }
 
