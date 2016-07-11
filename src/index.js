@@ -1,4 +1,5 @@
 import Plugin from 'stc-plugin';
+import mime from "mime";
 import {extend, BackgroundURLMapper, ResourceRegExp} from 'stc-helper';
 import {createToken, TokenType} from 'flkit';
 import {isMaster} from 'cluster';
@@ -14,10 +15,9 @@ export default class InlinePlugin extends Plugin {
 	 * run
 	 */
 	async run() {
-		let tokens = await this.getAst();
-		let content = await this.getContent("utf-8");
 		switch (this.file.extname) {
 			case "html":
+				let tokens = await this.getAst();
 				await Promise.all(
 					tokens.map((token, idx) => {
 						if (isTag(token, "script") || isTag(token, "link")) {
@@ -25,11 +25,12 @@ export default class InlinePlugin extends Plugin {
 								return idx;
 							}
 						}
-					}).filter(idx => !!idx).map(idx => this.handleHTMLTokenPromise(tokens, idx))
+					}).filter(idx => typeof idx !== "undefined").map(idx => this.handleHTMLTokenPromise(tokens, idx))
 				);
 				return { tokens };
 			case "css":
 				if (this.options.datauri) {
+					let tokens = await this.getAst();
 					await Promise.all(
 						tokens.map((token, idx) => {
 							if (token.type === TokenType.CSS_VALUE) {
@@ -44,6 +45,7 @@ export default class InlinePlugin extends Plugin {
 				break;
 			case "js":
 				if (this.options.jsinline) {
+					let content = await this.getContent("utf-8");
 					let newContent = await this.handleJSMatchPromise(content);
 					return {
 						content: newContent
@@ -54,6 +56,12 @@ export default class InlinePlugin extends Plugin {
 		}
 	}
 
+	/**
+	 * handleJSMatchPromise()
+	 * For each file content
+	 * return a promise which
+	 * replace `{inline:"xx"}.inline` to corresponding file content
+	 */
 	handleJSMatchPromise(_content) {
 		let content = _content;
 		return this.asyncReplace(content, ResourceRegExp.inline, async (a, b, c, d) => {
@@ -96,8 +104,7 @@ export default class InlinePlugin extends Plugin {
 		let rawContent = await file.getContent(null);
 		let base64content = new Buffer(rawContent).toString('base64');
 
-		mapper.url = `data:image/${mapper.type};base64,${base64content}`;
-		// todo MIME lookup
+		mapper.url = `data:${mime.lookup(mapper.url)};base64,${base64content}`;
 
 		token.value = token.ext.value = mapper + "";
 	}
@@ -121,14 +128,15 @@ export default class InlinePlugin extends Plugin {
 			return;
 		}
 
+		let file;
 		try {
-			let file = await this.getFileByPath(path),
-				content;
+			file = await this.getFileByPath(path);
 		} catch (err) {
 			return;
 		}
 
 		try {
+			let content;
 			if (isTag(token, "script")) {
 				if (this.options.uglify) {
 					let returnValue = await this.invokePlugin(UglifyJSPlugin, file);
@@ -153,9 +161,6 @@ export default class InlinePlugin extends Plugin {
 		}
 	}
 
-	/**
-	 * update
-	 */
 	update(data) {
 		switch (this.file.extname) {
 			case "html":
@@ -172,18 +177,16 @@ export default class InlinePlugin extends Plugin {
 		}
 	}
 
-	/**
-	 * use cluster
-	 */
 	static cluster() {
 		return true;
 	}
 
-	/**
-	 * We wont use cache
-	 */
 	static cache() {
 		return false;
+	}
+
+	static includes() {
+		return /\.(html|css|js)$/;
 	}
 }
 

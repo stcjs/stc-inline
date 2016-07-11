@@ -35,8 +35,10 @@ stc.workflow({
 
 ## Roadmap
 
+* [x] HTML JS inline support
+* [x] HTML CSS inline support
 * [x] support uglify
 * [x] use cluster if possilbe
 * [x] support `{inline: ""}.inline` in js files
 * [x] support picture base64-ify in css files
-* [ ] MIME lookup for css datauri inline
+* [x] MIME lookup for css datauri inline

@@ -17,7 +17,8 @@
 	"dependencies": {
 		"stc-helper": "^1.0.0",
 		"stc-plugin": "^1.0.1",
-		"flkit": "^3.0.1"
+		"flkit": "^3.0.1",
+		"mime": "^1.3.4"
 	},
 	"readmeFilename": "README.md",
 	"bugs": {
