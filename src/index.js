@@ -1,7 +1,8 @@
 import Plugin from 'stc-plugin';
-import {extend, BackgroundURLMapper} from 'stc-helper';
+import {extend, BackgroundURLMapper, ResourceRegExp} from 'stc-helper';
 import {createToken, TokenType} from 'flkit';
 import {isMaster} from 'cluster';
+
 import UglifyJSPlugin from 'stc-uglify';
 import CSSCompressPlugin from 'stc-css-compress';
 
@@ -14,7 +15,7 @@ export default class InlinePlugin extends Plugin {
 	 */
 	async run() {
 		let tokens = await this.getAst();
-
+		let content = await this.getContent("utf-8");
 		switch (this.file.extname) {
 			case "html":
 				await Promise.all(
@@ -26,7 +27,7 @@ export default class InlinePlugin extends Plugin {
 						}
 					}).filter(idx => !!idx).map(idx => this.handleHTMLTokenPromise(tokens, idx))
 				);
-				break;
+				return { tokens };
 			case "css":
 				if (this.options.datauri) {
 					await Promise.all(
@@ -38,15 +39,34 @@ export default class InlinePlugin extends Plugin {
 							}
 						}).filter(idx => !!idx).map(idx => this.handleCSSTokenPromise(tokens, idx))
 					);
+					return { tokens };
 				}
 				break;
 			case "js":
-				// todo
+				if (this.options.jsinline) {
+					let newContent = await this.handleJSMatchPromise(content);
+					return {
+						content: newContent
+					};
+				}
 				break;
 			default: return;
 		}
+	}
 
-		return { tokens };
+	handleJSMatchPromise(_content) {
+		let content = _content;
+		return this.asyncReplace(content, ResourceRegExp.inline, async (a, b, c, d) => {
+			let file = await this.getFileByPath(d);
+			let relcontent;
+			if (this.options.uglify) {
+				let returnValue = await this.invokePlugin(UglifyJSPlugin, file);
+				relcontent = returnValue.content;
+			} else {
+				relcontent = await file.getContent("utf-8");
+			}
+			return relcontent;
+		});
 	}
 
 	/**
@@ -77,6 +97,7 @@ export default class InlinePlugin extends Plugin {
 		let base64content = new Buffer(rawContent).toString('base64');
 
 		mapper.url = `data:image/${mapper.type};base64,${base64content}`;
+		// todo MIME lookup
 
 		token.value = token.ext.value = mapper + "";
 	}
@@ -136,11 +157,19 @@ export default class InlinePlugin extends Plugin {
 	 * update
 	 */
 	update(data) {
-		if (!data) {
-			return;
+		switch (this.file.extname) {
+			case "html":
+			case "css":
+				if (!data || !data.tokens) {
+					return;
+				}
+				this.setAst(data.tokens);
+				break;
+			case "js":
+				this.setContent(data.content);
+				break;
+			default: return;
 		}
-
-		this.setAst(data.tokens);
 	}
 
 	/**
