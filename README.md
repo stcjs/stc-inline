@@ -14,7 +14,8 @@ OR you can set `{jsinline: true}` to inline other js files. The syntax shoulde b
 var xxx = {inline: "/resource/js/a.js"}.inline;
 ```
 
-OR you can set `{datauri: true}` to inline small files in css files.
+Setting `datauri` to true or a integer number can inline base64-ified small images in CSS. "Small images" is defined by the value of `datauri`.
+If `datauri` is trusy and isn't a number, the treshold will be automatically set to 32.768kb. [According to this](https://msdn.microsoft.com/en-us/library/cc848897(v=vs.85).aspx).
 
 ## Usage
 
