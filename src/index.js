@@ -62,7 +62,23 @@ export default class InlinePlugin extends Plugin {
 				return { tokens };
 		}
 	}
-
+	escapeContent(content){
+		const multiReplace = function(s, arr) {
+			for (var i = 0; i < arr.length; i++) {
+				s = s.replace(arr[i][0], arr[i][1]);
+			}
+			return s;
+		}
+		return multiReplace(content, [
+			[/\\/g, "\\u005C"],
+			[/"/g, "\\u0022"],
+			[/'/g, "\\u0027"],
+			[/\//g, "\\u002F"],
+			[/\r/g, "\\u000A"],
+			[/\n/g, "\\u000D"],
+			[/\t/g, "\\u0009"]
+		]);
+	}
 	/**
 	 * handleJSMatchPromise()
 	 * For each file content
@@ -80,7 +96,8 @@ export default class InlinePlugin extends Plugin {
 			} else {
 				relcontent = await file.getContent("utf-8");
 			}
-			return relcontent;
+			relcontent = this.escapeContent(relcontent);
+			return `{code:"${relcontent}"}`;
 		});
 	}
 
