@@ -15,6 +15,9 @@ export default class InlinePlugin extends Plugin {
 	 * run
 	 */
 	async run() {
+		if(this.options.datauri && !Number.isInteger(this.options.datauri)){
+			this.options.datauri = PIC_SIZE_MAX;
+		}
 		switch (this.file.extname) {
 			case "css":
 				if (this.options.datauri) {
@@ -101,7 +104,7 @@ export default class InlinePlugin extends Plugin {
 		}
 
 		let file = await this.getFileByPath(mapper.url);
-		if (file.stat.size > PIC_SIZE_MAX) {
+		if (file.stat.size > this.options.datauri) {
 			return;
 		}
 
@@ -188,7 +191,7 @@ export default class InlinePlugin extends Plugin {
 	}
 
 	static cluster() {
-		return true;
+		return false;
 	}
 
 	static cache() {
