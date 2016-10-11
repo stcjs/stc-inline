@@ -10,12 +10,22 @@ import CSSCompressPlugin from 'stc-css-compress';
 const PIC_SIZE_MAX = 32768;
 const REG_CSS_URL = /\s*url\(/;
 
+const JS_REPLACE_ARR = [
+	[/\\/g, "\\u005C"],
+	[/"/g, "\\u0022"],
+	[/'/g, "\\u0027"],
+	[/\//g, "\\u002F"],
+	[/\r/g, "\\u000A"],
+	[/\n/g, "\\u000D"],
+	[/\t/g, "\\u0009"]
+];
+
 export default class InlinePlugin extends Plugin {
 	/**
 	 * run
 	 */
 	async run() {
-		if(this.options.datauri && !Number.isInteger(this.options.datauri)){
+		if (this.options.datauri && !Number.isInteger(this.options.datauri)) {
 			this.options.datauri = PIC_SIZE_MAX;
 		}
 		switch (this.file.extname) {
@@ -30,7 +40,7 @@ export default class InlinePlugin extends Plugin {
 								}
 							}
 						}).filter(idx => typeof idx !== "undefined")
-						.map(idx => this.handleCSSTokenPromise(tokens, idx))
+							.map(idx => this.handleCSSTokenPromise(tokens, idx))
 					);
 					return { tokens };
 				}
@@ -57,27 +67,31 @@ export default class InlinePlugin extends Plugin {
 							}
 						}
 					}).filter(idx => typeof idx !== "undefined")
-					.map(idx => this.handleHTMLTokenPromise(tokens, idx))
+						.map(idx => this.handleHTMLTokenPromise(tokens, idx))
 				);
 				return { tokens };
 		}
 	}
-	escapeContent(content){
-		const multiReplace = function(s, arr) {
-			for (var i = 0; i < arr.length; i++) {
-				s = s.replace(arr[i][0], arr[i][1]);
+	escapeStyleTokenlist(tokenlist) {
+		tokenlist.forEach((token) => {
+			if (token.type === TokenType.CSS_VALUE) {
+				token.value = this.escapeStyleContent(token.value)
 			}
-			return s;
+		});
+	}
+	escapeStyleContent(content) {
+		return content.replace(/<\/style>/g, "\\3c/style\\3e");
+	}
+	escapeScriptContent(content) {
+		return content.replace(/<\/script>/g, '\\x3c/script\\x3e');
+	}
+	escapeJsContent(content) {
+		let str = content;
+
+		for (var i = 0; i < JS_REPLACE_ARR.length; i++) {
+			str = str.replace(JS_REPLACE_ARR[i][0], JS_REPLACE_ARR[i][1]);
 		}
-		return multiReplace(content, [
-			[/\\/g, "\\u005C"],
-			[/"/g, "\\u0022"],
-			[/'/g, "\\u0027"],
-			[/\//g, "\\u002F"],
-			[/\r/g, "\\u000A"],
-			[/\n/g, "\\u000D"],
-			[/\t/g, "\\u0009"]
-		]);
+		return str;
 	}
 	/**
 	 * handleJSMatchPromise()
@@ -96,7 +110,7 @@ export default class InlinePlugin extends Plugin {
 			} else {
 				relcontent = await file.getContent("utf-8");
 			}
-			relcontent = this.escapeContent(relcontent);
+			relcontent = this.escapeJsContent(relcontent);
 			return `{code:"${relcontent}"}`;
 		});
 	}
@@ -169,13 +183,16 @@ export default class InlinePlugin extends Plugin {
 					content = await file.getContent("utf-8");
 				}
 
+				content = this.escapeScriptContent(content);
 				allToken[idx] = createHTMLTagToken("script", content);
 			} else if (isTag(token, "link")) {
 				if (this.options.uglify) {
 					let tokenlist = await this.invokePlugin(CSSCompressPlugin, file);
+					escapeStyleTokenlist(tokenlist);
 					allToken[idx] = createHTMLTagToken("style", "", tokenlist);
 				} else {
 					content = await file.getContent("utf-8");
+					content = this.escapeStyleContent(content);
 					allToken[idx] = createHTMLTagToken("style", content);
 				}
 			}
