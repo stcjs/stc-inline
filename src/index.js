@@ -1,6 +1,6 @@
 import Plugin from 'stc-plugin';
 import mime from "mime";
-import {extend, BackgroundURLMapper, ResourceRegExp} from 'stc-helper';
+import {extend, BackgroundURLMapper, ResourceRegExp, isRemoteUrl} from 'stc-helper';
 import {createToken, TokenType} from 'flkit';
 import {isMaster} from 'cluster';
 
@@ -163,6 +163,28 @@ export default class InlinePlugin extends Plugin {
 			path = getProp(token, "href");
 		}
 		if (!path) {
+			return;
+		}
+
+		if(isRemoteUrl(path)) {
+			if(!this.options.allowRemote) {
+				return;
+			}
+
+			try {
+				let content = await this.getContentFromUrl(path);
+				content = content.toString();
+				if (isTag(token, "script")) {
+					content = this.escapeScriptContent(content);
+					allToken[idx] = createHTMLTagToken("script", content);
+				} else if (isTag(token, "link")) {
+					content = this.escapeStyleContent(content);
+					allToken[idx] = createHTMLTagToken("style", content);
+				}
+			} catch(e) {
+				console.log(e);
+				console.error(`Internet error, request for ${path} failed.`);
+			}
 			return;
 		}
 

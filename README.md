@@ -17,6 +17,8 @@ var xxx = {inline: "/resource/js/a.js"}.inline;
 Setting `datauri` to true or a integer number can inline base64-ified small images in CSS. "Small images" is defined by the value of `datauri`.
 If `datauri` is trusy and isn't a number, the treshold will be automatically set to 32.768kb. [According to this](https://msdn.microsoft.com/en-us/library/cc848897(v=vs.85).aspx).
 
+Setting `allowRemote` to true can request online js/css files and then bundle them in HTML.
+
 ## Usage
 
 ```js
@@ -29,6 +31,7 @@ stc.workflow({
       uglify: true,
       datauri: true,
       jsinline: true,
+      allowRemote: true
     }
   },
 });
