@@ -188,7 +188,7 @@ export default class InlinePlugin extends Plugin {
 			} else if (isTag(token, "link")) {
 				if (this.options.uglify) {
 					let tokenlist = await this.invokePlugin(CSSCompressPlugin, file);
-					escapeStyleTokenlist(tokenlist);
+					this.escapeStyleTokenlist(tokenlist);
 					allToken[idx] = createHTMLTagToken("style", "", tokenlist);
 				} else {
 					content = await file.getContent("utf-8");
@@ -197,7 +197,7 @@ export default class InlinePlugin extends Plugin {
 				}
 			}
 		} catch (err) {
-			this.error(`Token replace error`, allToken[idx].loc.start.line, allToken[idx].loc.start.column);
+			// this.error(`Token replace error`, allToken[idx].loc.start.line, allToken[idx].loc.start.column);
 			console.error(err);
 		}
 	}
